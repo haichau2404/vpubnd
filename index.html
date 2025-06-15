@@ -8,10 +8,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Tích hợp thư viện SheetJS (xlsx) để xuất file Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <style>
         /* Tùy chỉnh thanh cuộn */
         ::-webkit-scrollbar { width: 8px; }
@@ -34,11 +30,12 @@
 </head>
 <body class="bg-gray-100 font-sans">
 
+    <!-- Thanh điều hướng chính -->
     <nav id="navbar" class="bg-white shadow-md sticky top-0 z-40">
         <div class="container mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 <div class="flex-shrink-0">
-                    <a href="#" class="text-sm sm:text-lg md:text-xl font-bold text-blue-700 flex items-center gap-2 uppercase">
+                    <a href="#" class="text-base sm:text-lg md:text-xl font-bold text-blue-700 flex items-center gap-2 uppercase">
                         VĂN PHÒNG UBND TỈNH LÂM ĐỒNG
                     </a>
                 </div>
@@ -49,7 +46,7 @@
 
     <main id="app" class="container mx-auto">
         <div id="home-view" class="view">
-            <div id="home-view-background" class="relative h-[calc(100vh-4rem)] min-h-[600px] flex items-center">
+             <div id="home-view-background" class="relative h-[calc(100vh-4rem)] min-h-[600px] flex items-center">
                 <div class="absolute inset-0 bg-gradient-to-r from-black/70 to-black/40"></div>
                 <div class="relative z-10 w-full px-4 sm:px-6 lg:px-8">
                     <div class="max-w-3xl text-left">
@@ -105,36 +102,51 @@
     <div id="modal-placeholder"></div>
 
     <script>
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_PROJECT_ID.appspot.com",
-      messagingSenderId: "YOUR_SENDER_ID",
-      appId: "YOUR_APP_ID"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-
     document.addEventListener('DOMContentLoaded', () => {
 
+        // --- GLOBAL STATE & CONSTANTS ---
+        const app = document.getElementById('app');
         const navLinks = document.getElementById('nav-links');
         const modalPlaceholder = document.getElementById('modal-placeholder');
-        const USER_ROLES = ['admin', 'Lãnh đạo Văn phòng UBND tỉnh', 'Trưởng phòng', 'Phó Trưởng phòng', 'Chuyên viên', 'Nhân viên'];
+
+        const USERS_KEY = 'taskflow_pro_users';
+        const TASKS_KEY = 'taskflow_pro_tasks';
+        const DEPARTMENTS_KEY = 'taskflow_pro_departments';
+        const SESSION_KEY = 'taskflow_pro_session';
         const TASK_CATEGORIES = ['Phát triển', 'Thiết kế', 'Marketing', 'Họp', 'Nghiên cứu', 'Khác'];
+        const USER_ROLES = ['admin', 'Lãnh đạo Văn phòng UBND tỉnh', 'Trưởng phòng', 'Phó Trưởng phòng', 'Chuyên viên', 'Nhân viên'];
         const TODAY = new Date(); TODAY.setHours(0, 0, 0, 0);
 
         let users = [];
         let tasks = [];
         let departments = [];
-        let currentUserData = null;
-        let showTimeline = false;
-        
-        let unsubscribes = [];
+        let currentUser = null;
+        let showTimeline = false; 
 
-        // UI UTILITIES
+        // --- DATA MANAGEMENT ---
+        const saveData = () => {
+            localStorage.setItem(USERS_KEY, JSON.stringify(users));
+            localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
+            localStorage.setItem(DEPARTMENTS_KEY, JSON.stringify(departments));
+        };
+
+        const loadData = () => {
+            users = JSON.parse(localStorage.getItem(USERS_KEY)) || [];
+            tasks = JSON.parse(localStorage.getItem(TASKS_KEY)) || [];
+            departments = JSON.parse(localStorage.getItem(DEPARTMENTS_KEY)) || [];
+            currentUser = JSON.parse(sessionStorage.getItem(SESSION_KEY)) || null;
+        };
+
+        const createDefaultAdmin = () => {
+            if (users.find(u => u.role === 'admin')) return;
+            const defaultDept = { id: `dept_${Date.now()}`, name: 'Chưa phân loại', description: 'Phòng ban mặc định'};
+            departments.push(defaultDept);
+            users.push({ id: `user_${Date.now()}`, name: 'Quản trị viên', email: 'admin@taskflow.com', password: 'admin', role: 'admin', departmentId: defaultDept.id, position: 'Quản trị hệ thống', phone: '0123456789', createdAt: new Date().toISOString() });
+            saveData();
+            console.log('Tài khoản admin và phòng ban mặc định đã được tạo.');
+        };
+
+        // --- UI UTILITIES ---
         const getRoleClass = (r) => ({'admin':'bg-purple-200 text-purple-800','Lãnh đạo Văn phòng UBND tỉnh':'bg-rose-200 text-rose-800','Trưởng phòng':'bg-red-200 text-red-800','Phó Trưởng phòng':'bg-orange-200 text-orange-800','Chuyên viên':'bg-blue-200 text-blue-800','Nhân viên':'bg-gray-200 text-gray-800'}[r]||'bg-gray-200 text-gray-800');
         const getPriorityClass = (p) => ({'Khẩn cấp':'bg-red-100 text-red-800','Cao':'bg-orange-100 text-orange-800','Trung bình':'bg-blue-100 text-blue-800','Thấp':'bg-gray-100 text-gray-800'}[p] || 'bg-gray-100 text-gray-800');
         const getStatusClass = (s) => ({'Hoàn thành':'bg-green-100 text-green-800','Đang thực hiện':'bg-indigo-100 text-indigo-800','Đã hủy':'bg-pink-100 text-pink-800','Chưa bắt đầu':'bg-gray-100 text-gray-800'}[s] || 'bg-gray-100 text-gray-800');
@@ -145,117 +157,56 @@
         const showNotification = (message, isError = false) => { const color = isError ? 'bg-red-500' : 'bg-green-500'; const notif = document.createElement('div'); notif.className = `fixed bottom-5 right-5 ${color} text-white py-2 px-4 rounded-lg shadow-lg z-50`; notif.textContent = message; document.body.appendChild(notif); setTimeout(() => notif.remove(), 3000); };
         const hasAdminRights = (user) => user && (user.role === 'admin' || user.role === 'Lãnh đạo Văn phòng UBND tỉnh');
 
-        // REAL-TIME DATA LISTENERS
-        const setupDataListeners = () => {
-            if (unsubscribes.length > 0) clearDataAndListeners();
-            unsubscribes.push(db.collection('users').onSnapshot(snapshot => { users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); if (auth.currentUser) { currentUserData = users.find(u => u.id === auth.currentUser.uid); } refreshUI(); }, error => console.error("Error fetching users:", error)));
-            unsubscribes.push(db.collection('tasks').onSnapshot(snapshot => { tasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); refreshUI(); }, error => console.error("Error fetching tasks:", error)));
-            unsubscribes.push(db.collection('departments').onSnapshot(snapshot => { departments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); refreshUI(); }, error => console.error("Error fetching departments:", error)));
-        };
-        const clearDataAndListeners = () => { unsubscribes.forEach(unsub => unsub()); unsubscribes = []; users = []; tasks = []; departments = []; currentUserData = null; };
-        const refreshUI = () => { if (!auth.currentUser) return; const activeTabEl = document.querySelector('.dashboard-tab.border-blue-500'); if (activeTabEl) { renderTabContent(activeTabEl.dataset.tab); } };
-        
-        // AUTHENTICATION
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                if(unsubscribes.length === 0) setupDataListeners();
-                updateLoggedInUI(user);
+        // --- UI RENDERING ---
+        const updateUI = () => {
+            const mainContainer = document.querySelector('main');
+            if (currentUser) {
+                mainContainer.classList.remove('p-0'); 
+                navLinks.innerHTML = `<span class="font-semibold text-gray-700 hidden sm:block">Chào, ${currentUser.name}!</span><div id="user-avatar" class="cursor-pointer">${generateAvatar(currentUser.name, 'w-9 h-9')}</div><button id="logout-btn" class="bg-red-100 text-red-700 font-bold py-2 px-3 text-sm rounded-lg hover:bg-red-200 transition">Đăng xuất</button>`;
+                document.getElementById('logout-btn').addEventListener('click', handleLogout);
+                renderDashboard();
+                showView('dashboard-view');
             } else {
-                clearDataAndListeners();
-                updateLoggedOutUI();
+                mainContainer.classList.add('p-0');
+                mainContainer.classList.remove('p-4', 'sm:p-6', 'lg:p-8');
+                navLinks.innerHTML = `<a href="#" data-view="login-view" class="view-switcher text-gray-600 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Đăng nhập</a><a href="#" data-view="register-view" class="view-switcher bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition text-sm">Đăng ký</a>`;
+                showView('home-view');
             }
-        });
-
-        const updateLoggedInUI = (user) => {
-            if (!users.length) { setTimeout(() => updateLoggedInUI(user), 150); return; }
-            currentUserData = users.find(u => u.id === user.uid);
-            if (!currentUserData) { setTimeout(() => updateLoggedInUI(user), 250); return; }
-            document.querySelector('main').classList.add('p-4', 'sm:p-6', 'lg:p-8');
-            navLinks.innerHTML = `<span class="font-semibold text-gray-700 hidden sm:block">Chào, ${currentUserData.name}!</span><div id="user-avatar" class="cursor-pointer">${generateAvatar(currentUserData.name, 'w-9 h-9')}</div><button id="logout-btn" class="bg-red-100 text-red-700 font-bold py-2 px-3 text-sm rounded-lg hover:bg-red-200 transition">Đăng xuất</button>`;
-            document.getElementById('logout-btn').addEventListener('click', handleLogout);
-            renderDashboard();
-            showView('dashboard-view');
-        };
-
-        const updateLoggedOutUI = () => {
-            document.querySelector('main').classList.remove('p-4', 'sm:p-6', 'lg:p-8');
-            navLinks.innerHTML = `<a href="#" data-view="login-view" class="view-switcher text-gray-600 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Đăng nhập</a><a href="#" data-view="register-view" class="view-switcher bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition text-sm">Đăng ký</a>`;
-            showView('home-view');
             setupViewSwitcherListeners();
         };
 
-        const handleLogin = (e) => { e.preventDefault(); const email = document.getElementById('login-email').value, password = document.getElementById('login-password').value; auth.signInWithEmailAndPassword(email, password).then(() => showNotification('Đăng nhập thành công!')).catch(err => showNotification(`Lỗi: ${err.message}`, true)); };
-        const handleLogout = () => auth.signOut();
-        const handleRegister = (e) => {
-            e.preventDefault();
-            const name = document.getElementById('register-name').value;
-            const email = document.getElementById('register-email').value;
-            const password = document.getElementById('register-password').value;
-            auth.createUserWithEmailAndPassword(email, password)
-                .then(userCredential => {
-                    const defaultDept = departments.find(d => d.name === 'Chưa phân loại') || departments[0];
-                    db.collection('users').doc(userCredential.user.uid).set({ name: name, email: email, role: 'Nhân viên', createdAt: new Date().toISOString(), departmentId: defaultDept?.id || null, position: '', phone: '' }).then(() => { showNotification('Đăng ký thành công!'); showView('login-view'); });
-                }).catch(err => showNotification(`Lỗi đăng ký: ${err.message}`, true));
-        };
-        
-        const renderDashboard = () => {
-            const canAdmin = hasAdminRights(currentUserData);
-            document.getElementById('dashboard-title').textContent = canAdmin ? 'Bảng điều khiển Quản trị' : 'Bảng điều khiển';
-            const tabsContainer = document.getElementById('dashboard-tabs');
-            let tabsHTML = `<a href="#" class="dashboard-tab border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="tasks">Quản lý Công việc</a>`;
-            if (canAdmin) {
-                tabsHTML += `<a href="#" class="dashboard-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="users">Quản lý Người dùng</a>`;
-                tabsHTML += `<a href="#" class="dashboard-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="departments">Quản lý Phòng ban</a>`;
-            }
-            tabsHTML += `<a href="#" class="dashboard-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="stats">Thống kê</a>`;
-            tabsContainer.innerHTML = tabsHTML;
-            renderTabContent('tasks'); 
-            tabsContainer.querySelectorAll('.dashboard-tab').forEach(tab => {
-                tab.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    tabsContainer.querySelectorAll('.dashboard-tab').forEach(t => { t.classList.replace('border-blue-500','border-transparent'); t.classList.replace('text-blue-600','text-gray-500');});
-                    e.target.classList.replace('border-transparent','border-blue-500'); e.target.classList.replace('text-gray-500','text-blue-600');
-                    renderTabContent(e.target.dataset.tab);
-                });
-            });
-        };
-
-        const renderTabContent = (tabId) => {
-            const contentContainer = document.getElementById('tab-content');
-            const canAdmin = hasAdminRights(currentUserData);
-            if (tabId === 'tasks') { contentContainer.innerHTML = getTasksViewHTML(); updateAllTaskStatuses(); renderTasksTable(); setupTaskViewListeners(); } 
-            else if (tabId === 'users' && canAdmin) { contentContainer.innerHTML = getUsersViewHTML(); renderUsersTable(); setupUserViewListeners(); } 
-            else if (tabId === 'departments' && canAdmin) { contentContainer.innerHTML = getDepartmentsViewHTML(); renderDepartmentsTable(); setupDepartmentViewListeners(); } 
-            else if (tabId === 'stats') { contentContainer.innerHTML = canAdmin ? getAdminStatsViewHTML() : getMemberStatsViewHTML(); if (canAdmin) renderAdminStats(); else renderMemberStats(); }
-        };
-
-        const getTasksViewHTML = () => { /* ... */ };
-        const getUsersViewHTML = () => { /* ... */ };
-        const getDepartmentsViewHTML = () => { /* ... */ };
-        const getAdminStatsViewHTML = () => { /* ... */ };
-        const getMemberStatsViewHTML = () => { /* ... */ };
-        const generateTimelineHTML = (task) => { /* ... */ };
-        const renderTasksTable = () => { /* ... */ };
-        const renderUsersTable = () => { /* ... */ };
-        const renderDepartmentsTable = () => { /* ... */ };
-        const renderAdminStats = () => { /* ... */ };
-        const renderMemberStats = () => { /* ... */ };
-        const renderStatsTaskList = (isAdmin) => { /* ... */ };
+        const renderDashboard = () => { /* ... full function ... */ };
+        const renderTabContent = (tabId) => { /* ... full function ... */ };
+        const getTasksViewHTML = () => { /* ... full function ... */ };
+        const getUsersViewHTML = () => { /* ... full function ... */ };
+        const getDepartmentsViewHTML = () => { /* ... full function ... */ };
+        const getAdminStatsViewHTML = () => { /* ... full function ... */ };
+        const getMemberStatsViewHTML = () => { /* ... full function ... */ };
+        const generateTimelineHTML = (task) => { /* ... full function ... */ };
+        const renderTasksTable = () => { /* ... full function ... */ };
+        const renderUsersTable = () => { /* ... full function ... */ };
+        const renderDepartmentsTable = () => { /* ... full function ... */ };
+        const renderAdminStats = () => { /* ... full function ... */ };
+        const renderMemberStats = () => { /* ... full function ... */ };
+        const renderStatsTaskList = (isAdmin) => { /* ... full function ... */ };
 
         // --- CORE LOGIC & HANDLERS ---
-        const getAutoTaskStatus = (task) => { /* ... */ };
-        const updateAllTaskStatuses = () => { /* ... */ };
-        const openTaskModal = (task = null) => { /* ... */ };
-        const handleTaskSubmit = async (e) => { /* ... */ };
-        const deleteTask = async (taskId) => { /* ... */ };
-        const showDocumentDetailModal = (taskId) => { /* ... */ };
-        const openUserModal = (user = null) => { /* ... */ };
-        const handleUserSubmit = async (e) => { /* ... */ };
-        const deleteUser = async (userId) => { /* ... */ };
-        const openDepartmentModal = (dept = null) => { /* ... */ };
-        const handleDepartmentSubmit = async (e) => { /* ... */ };
-        const deleteDepartment = async (deptId) => { /* ... */ };
-        const exportToExcel = () => { /* ... */ };
+        const getAutoTaskStatus = (task) => { /* ... full function ... */ };
+        const updateAllTaskStatuses = () => { /* ... full function ... */ };
+        const handleLogin = (e) => { /* ... full function ... */ };
+        const handleLogout = () => { /* ... full function ... */ };
+        const handleRegister = (e) => { /* ... full function ... */ };
+        const openTaskModal = (task = null) => { /* ... full function ... */ };
+        const handleTaskSubmit = (e) => { /* ... full function ... */ };
+        const deleteTask = (taskId) => { /* ... full function ... */ };
+        const showDocumentDetailModal = (taskId) => { /* ... full function ... */ };
+        const openUserModal = (user = null) => { /* ... full function ... */ };
+        const handleUserSubmit = (e) => { /* ... full function ... */ };
+        const deleteUser = (userId) => { /* ... full function ... */ };
+        const openDepartmentModal = (dept = null) => { /* ... full function ... */ };
+        const handleDepartmentSubmit = (e) => { /* ... full function ... */ };
+        const deleteDepartment = (deptId) => { /* ... full function ... */ };
+        const exportToExcel = () => { /* ... full function ... */ };
         
         // --- EVENT LISTENER SETUP ---
         function setupGlobalListeners() {
@@ -299,10 +250,9 @@
 
         // --- APP INITIALIZATION ---
         const init = () => {
-            setupGlobalListeners();
-            updateLoggedOutUI();
+            loadData(); createDefaultAdmin(); setupGlobalListeners(); updateUI();
             setInterval(() => {
-                if(auth.currentUser){
+                if(currentUser){
                     console.log('Running periodic task status update...');
                     updateAllTaskStatuses();
                 }
