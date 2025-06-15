@@ -35,7 +35,7 @@
         <div class="container mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 <div class="flex-shrink-0">
-                    <a href="#" class="text-base sm:text-lg md:text-xl font-bold text-blue-700 flex items-center gap-2 uppercase">
+                    <a href="#" class="text-sm sm:text-lg md:text-xl font-bold text-blue-700 flex items-center gap-2 uppercase">
                         VĂN PHÒNG UBND TỈNH LÂM ĐỒNG
                     </a>
                 </div>
@@ -161,7 +161,7 @@
         const updateUI = () => {
             const mainContainer = document.querySelector('main');
             if (currentUser) {
-                mainContainer.classList.remove('p-0'); 
+                mainContainer.classList.remove('p-0');
                 navLinks.innerHTML = `<span class="font-semibold text-gray-700 hidden sm:block">Chào, ${currentUser.name}!</span><div id="user-avatar" class="cursor-pointer">${generateAvatar(currentUser.name, 'w-9 h-9')}</div><button id="logout-btn" class="bg-red-100 text-red-700 font-bold py-2 px-3 text-sm rounded-lg hover:bg-red-200 transition">Đăng xuất</button>`;
                 document.getElementById('logout-btn').addEventListener('click', handleLogout);
                 renderDashboard();
@@ -175,15 +175,62 @@
             setupViewSwitcherListeners();
         };
 
-        const renderDashboard = () => { /* ... full function ... */ };
-        const renderTabContent = (tabId) => { /* ... full function ... */ };
-        const getTasksViewHTML = () => { /* ... full function ... */ };
-        const getUsersViewHTML = () => { /* ... full function ... */ };
-        const getDepartmentsViewHTML = () => { /* ... full function ... */ };
-        const getAdminStatsViewHTML = () => { /* ... full function ... */ };
-        const getMemberStatsViewHTML = () => { /* ... full function ... */ };
-        const generateTimelineHTML = (task) => { /* ... full function ... */ };
-        const renderTasksTable = () => { /* ... full function ... */ };
+        const renderDashboard = () => {
+            const canAdmin = hasAdminRights(currentUser);
+            document.getElementById('dashboard-title').textContent = canAdmin ? 'Bảng điều khiển Quản trị' : 'Bảng điều khiển';
+            const tabsContainer = document.getElementById('dashboard-tabs');
+            let tabsHTML = `<a href="#" class="dashboard-tab border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="tasks">Quản lý Công việc</a>`;
+            if (canAdmin) {
+                tabsHTML += `<a href="#" class="dashboard-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="users">Quản lý Người dùng</a>`;
+                tabsHTML += `<a href="#" class="dashboard-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="departments">Quản lý Phòng ban</a>`;
+            }
+            tabsHTML += `<a href="#" class="dashboard-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="stats">Thống kê</a>`;
+            tabsContainer.innerHTML = tabsHTML;
+            renderTabContent('tasks'); 
+            tabsContainer.querySelectorAll('.dashboard-tab').forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    tabsContainer.querySelectorAll('.dashboard-tab').forEach(t => { t.classList.replace('border-blue-500','border-transparent'); t.classList.replace('text-blue-600','text-gray-500');});
+                    e.target.classList.replace('border-transparent','border-blue-500'); e.target.classList.replace('text-gray-500','text-blue-600');
+                    renderTabContent(e.target.dataset.tab);
+                });
+            });
+        };
+
+        const renderTabContent = (tabId) => {
+            const contentContainer = document.getElementById('tab-content');
+            const canAdmin = hasAdminRights(currentUser);
+            if (tabId === 'tasks') { contentContainer.innerHTML = getTasksViewHTML(); updateAllTaskStatuses(); renderTasksTable(); setupTaskViewListeners(); } 
+            else if (tabId === 'users' && canAdmin) { contentContainer.innerHTML = getUsersViewHTML(); renderUsersTable(); setupUserViewListeners(); } 
+            else if (tabId === 'departments' && canAdmin) { contentContainer.innerHTML = getDepartmentsViewHTML(); renderDepartmentsTable(); setupDepartmentViewListeners(); } 
+            else if (tabId === 'stats') { contentContainer.innerHTML = canAdmin ? getAdminStatsViewHTML() : getMemberStatsViewHTML(); if (canAdmin) renderAdminStats(); else renderMemberStats(); }
+        };
+
+        const getTasksViewHTML = () => {
+            const canAdmin = hasAdminRights(currentUser);
+            return `<div class="bg-white p-4 rounded-lg shadow-sm mb-4"><div class="grid grid-cols-1 sm:grid-cols-2 ${canAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4 items-center"><input type="text" id="task-search" placeholder="Tìm kiếm công việc, văn bản..." class="w-full p-2 border rounded-lg ${canAdmin ? 'lg:col-span-1' : ''}"><select id="task-filter-status" class="w-full p-2 border rounded-lg"><option value="">Tất cả Trạng thái</option>${['Chưa bắt đầu', 'Đang thực hiện', 'Hoàn thành', 'Đã hủy'].map(s => `<option value="${s}">${s}</option>`).join('')}</select><select id="task-sort" class="w-full p-2 border rounded-lg"><option value="default">Sắp xếp mặc định</option><option value="orderNumber_asc">Theo STT</option><option value="documentNumber_asc">Theo Số văn bản</option></select>${canAdmin ? `<select id="task-filter-category" class="w-full p-2 border rounded-lg"><option value="">Tất cả Danh mục</option>${TASK_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}</select>` : ''}<button id="toggle-timeline-btn" class="bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg text-sm whitespace-nowrap">${showTimeline ? 'Ẩn' : 'Hiện'} Tiến trình</button></div></div><div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2"><button id="add-task-btn" class="w-full sm:w-auto bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-300">+ Thêm Công việc</button>${canAdmin ? `<button id="export-excel-btn" class="w-full sm:w-auto bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 transition duration-300">📥 Xuất Excel</button>` : ''}</div><div class="bg-white rounded-lg shadow-md overflow-x-auto"><table class="w-full min-w-max text-left"><thead class="bg-gray-50"></thead><tbody id="tasks-table-body"></tbody></table></div>`;
+        };
+        const getUsersViewHTML = () => `<div class="bg-white p-4 rounded-lg shadow-sm mb-4"><input type="text" id="user-search" placeholder="Tìm theo tên, email, phòng ban..." class="w-full md:w-1/3 p-2 border rounded-lg"></div><div class="flex justify-start items-center mb-4"><button id="add-user-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-300">+ Thêm Người dùng</button></div><div class="bg-white rounded-lg shadow-md overflow-x-auto"><table class="w-full min-w-max text-left"><thead class="bg-gray-50"></thead><tbody id="users-table-body"></tbody></table></div>`;
+        const getDepartmentsViewHTML = () => `<div class="flex justify-start items-center mb-4"><button id="add-department-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-300">+ Thêm Phòng ban</button></div><div class="bg-white rounded-lg shadow-md overflow-x-auto"><table class="w-full min-w-max text-left"><thead class="bg-gray-50"></thead><tbody id="departments-table-body"></tbody></table></div>`;
+        const getAdminStatsViewHTML = () => `<div id="stats-view" class="space-y-8"><div class="grid grid-cols-1 md:grid-cols-3 gap-6"><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-lg font-semibold text-gray-600">Tổng số người dùng</h3><p id="stats-total-users" class="text-4xl font-bold text-blue-600">0</p></div><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-lg font-semibold text-gray-600">Tổng số công việc</h3><p id="stats-total-tasks" class="text-4xl font-bold text-green-600">0</p></div><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-lg font-semibold text-gray-600">Tổng số phòng ban</h3><p id="stats-total-departments" class="text-4xl font-bold text-purple-600">0</p></div></div><div class="grid grid-cols-1 lg:grid-cols-2 gap-8"><div class="space-y-8"><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-xl font-bold text-gray-800 mb-4">Công việc theo Trạng thái</h3><div id="stats-tasks-by-status" class="space-y-3"></div></div><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-xl font-bold text-gray-800 mb-4">Công việc theo Mức độ ưu tiên</h3><div id="stats-tasks-by-priority" class="space-y-3"></div></div></div><div class="space-y-8"><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-xl font-bold text-gray-800 mb-4">Nhân sự theo Phòng ban</h3><div id="stats-users-by-department" class="space-y-3"></div></div><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-xl font-bold text-gray-800 mb-4">Thành viên tích cực nhất</h3><div id="stats-top-users" class="space-y-4"></div></div></div></div><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-xl font-bold text-gray-800 mb-4">Danh sách công việc chi tiết</h3><div class="overflow-x-auto"><table class="w-full min-w-max text-left"><thead class="bg-gray-50"></thead><tbody id="stats-task-list-body"></tbody></table></div></div></div>`;
+        const getMemberStatsViewHTML = () => `<div id="stats-view" class="space-y-8"><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-lg font-semibold text-gray-600">Tổng công việc của bạn</h3><p id="stats-member-total-tasks" class="text-4xl font-bold text-green-600">0</p></div><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-lg font-semibold text-gray-600">Công việc đã hoàn thành</h3><p id="stats-member-completed-tasks" class="text-4xl font-bold text-indigo-600">0</p></div></div><div class="grid grid-cols-1 lg:grid-cols-2 gap-8"><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-xl font-bold text-gray-800 mb-4">Công việc theo Trạng thái</h3><div id="stats-member-tasks-by-status" class="space-y-3"></div></div><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-xl font-bold text-gray-800 mb-4">Công việc theo Mức độ ưu tiên</h3><div id="stats-member-tasks-by-priority" class="space-y-3"></div></div></div><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-xl font-bold text-gray-800 mb-4">Danh sách công việc chi tiết</h3><div class="overflow-x-auto"><table class="w-full min-w-max text-left"><thead class="bg-gray-50"></thead><tbody id="stats-task-list-body"></tbody></table></div></div></div>`;
+        const generateTimelineHTML = (task) => { const start = task.startDate ? new Date(task.startDate) : null; const end = task.endDate ? new Date(task.endDate) : null; if (!start || !end || start > end) return '<div class="mt-2 text-xs text-gray-400">Không đủ dữ liệu ngày để hiển thị tiến trình.</div>'; const totalDuration = (end - start); const elapsedDuration = (TODAY - start); let progressPercent = 0; if (totalDuration > 0) progressPercent = Math.min(100, Math.max(0, (elapsedDuration / totalDuration) * 100)); else if (TODAY >= start) progressPercent = 100; let color = 'bg-yellow-400'; const isOverdue = TODAY > end && task.status !== 'Hoàn thành'; if (task.status === 'Hoàn thành') color = 'bg-blue-500'; else if (isOverdue) color = 'bg-red-500'; return `<div class="mt-3"><div class="flex justify-between text-xs text-gray-500 mb-1"><span class="font-semibold text-green-600">${task.startDate}</span><span class="font-bold">${progressPercent.toFixed(0)}%</span><span class="font-semibold text-gray-600">${task.endDate}</span></div><div class="relative h-2 w-full bg-gray-200 rounded-full" title="Tiến trình: ${progressPercent.toFixed(0)}%"><div class="h-full rounded-full ${color}" style="width: ${progressPercent}%;"></div></div></div>`; };
+        const renderTasksTable = () => {
+            const canAdmin = hasAdminRights(currentUser);
+            const tableBody = document.querySelector('#tasks-table-body'); if (!tableBody) return;
+            const tableHead = tableBody.previousElementSibling;
+            tableHead.innerHTML = `<tr><th class="p-2 sm:p-4 font-semibold text-gray-700">STT</th><th class="p-2 sm:p-4 font-semibold text-gray-700">Công việc & Văn bản</th>${canAdmin ? '<th class="p-2 sm:p-4 font-semibold text-gray-700">Gán cho</th>' : ''}<th class="p-2 sm:p-4 font-semibold text-gray-700">Trạng thái</th><th class="p-2 sm:p-4 font-semibold text-gray-700">Ngày</th><th class="p-2 sm:p-4 font-semibold text-gray-700 text-center">Hành động</th></tr>`;
+            const searchTerm = document.getElementById('task-search').value.toLowerCase();
+            const statusFilter = document.getElementById('task-filter-status').value;
+            const sortOption = document.getElementById('task-sort').value;
+            let filteredTasks = canAdmin ? [...tasks] : tasks.filter(t => t.assignedTo === currentUser.id || t.createdBy === currentUser.id);
+            filteredTasks = filteredTasks.filter(t => (t.title.toLowerCase().includes(searchTerm) || (t.documentNumber && t.documentNumber.toLowerCase().includes(searchTerm)) || (t.documentSummary && t.documentSummary.toLowerCase().includes(searchTerm))) && (!statusFilter || t.status === statusFilter));
+            if (sortOption === 'orderNumber_asc') filteredTasks.sort((a, b) => (parseInt(a.orderNumber) || Infinity) - (parseInt(b.orderNumber) || Infinity));
+            else if (sortOption === 'documentNumber_asc') filteredTasks.sort((a, b) => (a.documentNumber || '').localeCompare(b.documentNumber || ''));
+            tableBody.innerHTML = '';
+            if (filteredTasks.length === 0) { tableBody.innerHTML = `<tr><td colspan="${canAdmin ? 6:5}" class="text-center p-8 text-gray-500">Không tìm thấy công việc nào.</td></tr>`; return; }
+            filteredTasks.forEach(task => { const assignedUser = users.find(u => u.id === task.assignedTo); const tr = document.createElement('tr'); tr.className = 'border-b border-gray-200 hover:bg-gray-50'; const timelineHTML = showTimeline ? generateTimelineHTML(task) : ''; tr.innerHTML = `<td class="p-2 sm:p-4 align-top font-semibold text-gray-700">${task.orderNumber || ''}</td><td class="p-2 sm:p-4 align-top"><div class="font-bold text-gray-800">${task.title}</div>${task.documentNumber ? `<div class="mt-1"><span class="font-semibold text-sm">VB:</span> <span class="text-sm text-gray-600">${task.documentNumber}</span> <button class="view-doc-btn text-blue-500 text-xs hover:underline" data-id="${task.id}">(Xem)</button></div><div class="text-sm text-gray-500 mt-1 line-clamp-2">${task.documentSummary || ''}</div>` : ''}${timelineHTML}</td>${canAdmin ? `<td class="p-2 sm:p-4 align-top"><div class="flex items-center gap-2">${generateAvatar(assignedUser?.name, 'w-8 h-8')}<span class="text-sm">${assignedUser?.name || 'N/A'}</span></div></td>` : ''}<td class="p-2 sm:p-4 align-top"><span class="px-2 py-1 text-xs font-semibold rounded-full ${getStatusClass(task.status)}">${task.status}</span></td><td class="p-2 sm:p-4 text-sm text-gray-600 align-top"><div>BĐ: ${task.startDate || 'N/A'}</div><div>HT: ${task.endDate || 'N/A'}</div></td><td class="p-2 sm:p-4 text-center align-top"><button data-id="${task.id}" class="edit-task-btn p-2 text-blue-600 hover:bg-blue-100 rounded-full">Sửa</button><button data-id="${task.id}" class="delete-task-btn p-2 text-red-600 hover:bg-red-100 rounded-full">Xóa</button></td>`; tableBody.appendChild(tr); });
+        };
         const renderUsersTable = () => { /* ... full function ... */ };
         const renderDepartmentsTable = () => { /* ... full function ... */ };
         const renderAdminStats = () => { /* ... full function ... */ };
